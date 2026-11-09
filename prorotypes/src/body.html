@@ -1,0 +1,68 @@
+<div class="app">
+  <aside class="side" id="side" aria-label="Разделы">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <div style="line-height:1.15;min-width:0"><div class="h-sm">Интеллект X</div><div class="cap subtle">Безопасное образование</div></div>
+    </div>
+    <nav class="nav" id="nav"></nav>
+    <div class="side-foot cap subtle">Прототип по ТЗ SafeEducation v0.1 · данные — фикстура</div>
+  </aside>
+
+  <div class="main-wrap">
+    <header class="top">
+      <button class="btn btn-icon menu-btn" id="menu-btn" aria-label="Открыть разделы">{{ic:three-bars}}</button>
+      <div class="col" style="gap:0;min-width:0">
+        <div class="h-md" id="page-title" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Главная</div>
+        <div class="cap muted hide-sm" id="org-name" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></div>
+      </div>
+      <div class="sp"></div>
+      <button class="mode-chip" id="mode-chip" data-kit-menu="#mode-menu" aria-label="Режим объекта"></button>
+      <span class="upd hide-sm" id="upd" data-tip="Показатели обновляются автоматически каждые 10 с (SKD-DSH-02)"><i></i><span id="upd-t"></span></span>
+      <button class="btn btn-icon" id="proto-btn" data-kit-menu="#proto-pop" aria-label="Параметры прототипа">{{ic:sliders}}</button>
+      <button class="btn btn-icon" data-kit-theme aria-label="Сменить тему">{{ic:moon}}</button>
+      <button class="btn btn-subtle hide-sm" id="user-btn" data-kit-menu="#user-menu">{{ic:person}}<span id="user-name"></span></button>
+    </header>
+    <div class="stale" id="stale" hidden role="status">{{ic:cloud-offline}}<span>Нет связи с сервером объекта — данные устарели, обновлено <b id="stale-t"></b>. Режимы, эвакуация и перекличка работают локально.</span></div>
+
+    <main id="view" tabindex="-1"></main>
+    <div class="fixture-note">Данные — фикстура, демо-время <span id="fx-time"></span>. Прототип не подключён к «Интеллект X».</div>
+  </div>
+</div>
+
+<div class="menu" id="mode-menu" hidden role="menu" style="width:300px"></div>
+
+<div class="popover" id="proto-pop" hidden style="width:320px;padding:12px 14px">
+  <div class="h-sm" style="margin-bottom:8px">Параметры прототипа</div>
+  <label class="label" for="pp-profile">Профиль учреждения (SKD-UI-04)</label>
+  <select class="field" id="pp-profile"><option value="school">Школа</option><option value="kinder">Детский сад</option><option value="college">Колледж</option></select>
+  <div style="height:8px"></div>
+  <label class="label" for="pp-role">Роль пользователя (раздел 9)</label>
+  <select class="field" id="pp-role"><option value="director">Директор</option><option value="security">Зам. по безопасности</option><option value="guard">Пост охраны</option><option value="teacher">Классный руководитель</option></select>
+  <div style="height:8px"></div>
+  <label class="label" for="pp-state">Состояние блоков данных</label>
+  <select class="field" id="pp-state"><option value="data">Данные</option><option value="loading">Загрузка</option><option value="empty">Пусто</option><option value="error">Ошибка</option></select>
+  <div style="height:8px"></div>
+  <label class="choice"><input type="checkbox" class="switch" role="switch" id="pp-sim" checked> Поток проходов СКУД (каждые 6 с)</label>
+  <label class="choice"><input type="checkbox" class="switch" role="switch" id="pp-auto" checked> Учителя отмечают детей при эвакуации</label>
+  <label class="choice"><input type="checkbox" class="switch" role="switch" id="pp-offline"> Связь с сервером потеряна</label>
+  <div class="ov" style="margin:10px 0 6px">События для демонстрации</div>
+  <div class="col" style="gap:6px">
+    <button class="btn btn-red" data-act="sim-fire">{{ic:flame}}Сработка СПС — пожар</button>
+    <button class="btn btn-outline" data-act="sim-dontknow">{{ic:comment}}Родитель ответил «не знаю»</button>
+    <button class="btn btn-outline" data-act="sim-fight">{{ic:alert}}Детектор: драка</button>
+    <button class="btn btn-outline" data-act="sim-fault">{{ic:device-camera-video}}Неисправность камеры</button>
+  </div>
+</div>
+<div class="menu" id="user-menu" hidden role="menu" style="width:240px">
+  <div style="padding:8px 12px"><div class="h-sm" id="um-name"></div><div class="cap muted" id="um-role"></div></div>
+  <button class="menu-item" role="menuitem">{{ic:person}}Профиль</button>
+  <button class="menu-item" role="menuitem" data-kit-menu="#proto-pop">{{ic:sync}}Сменить роль (прототип)</button>
+</div>
+
+<div class="sheet-scrim" id="sheet-scrim" hidden></div>
+<aside class="sheet" id="sheet" aria-label="Карточка" tabindex="-1"></aside>
+
+<dialog class="dialog" id="dlg"></dialog>
+
+<div class="toasts" id="toasts" aria-live="polite"></div>
+<div class="tip" id="tip" hidden></div>
