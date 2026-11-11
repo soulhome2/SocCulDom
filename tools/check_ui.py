@@ -8,8 +8,8 @@
   - горизонтальную прокрутку страницы (что-то вышло за край экрана);
   - кнопки и ссылки без текста и без aria-label;
   - контраст текста ниже 4,5:1 к фону под ним. «ИЗВЕСТНО», не находка — так задано в дизайн-системе ONE PSIM
-    (заметки к токенам в prorotypes/vendor/one-psim/tokens.json): текст цветом --one-fg-subtle и --one-fg-placeholder,
-    белый текст на --one-palette-green, -orange, -amber.
+    (prorotypes/vendor/one-psim/kit.css): текст цветом --color-fg-subtle и --color-fg-placeholder,
+    белый текст на --color-green, --color-orange, --color-amber.
 С --shots сохраняет снимки <экран>-<тема>-<ширина>.png — их смотреть глазами: порядок, выравнивание, обрезанный текст
 проверка не меряет. Снимки — во временную папку, не в репозиторий.
 Код выхода 1, если есть строки FAIL.
@@ -19,16 +19,24 @@ import pathlib
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-ROUTES = ["home", "post", "video", "attendance", "handover", "events", "people", "journals", "reports", "service", "settings", "audit", "rollcall"]
+# экран → (профиль, роль): каждый экран смотрим той ролью, которой он виден (у директора нет «Пост охраны» и «Обход»)
+ROUTES = {"home": ("school", "director"), "post": ("school", "guard"), "rounds": ("school", "guard"),
+          "video": ("school", "director"), "attendance": ("school", "director"), "handover": ("kinder", "director"),
+          "events": ("school", "director"), "rollcall": ("school", "security"), "people": ("college", "director"),
+          "journals": ("school", "director"), "reports": ("school", "director"), "service": ("school", "director"),
+          "config": ("school", "director"), "audit": ("school", "director")}
 
 PROBE = r"""
 () => {
   const out = {overflow: document.documentElement.scrollWidth - innerWidth, empty: [], contrast: []};
   const css = getComputedStyle(document.documentElement);
   const tok = v => css.getPropertyValue(v).trim().toLowerCase();
-  const known = ['--one-fg-subtle', '--one-fg-placeholder'].map(tok);
-  const paletteBg = ['--one-palette-green', '--one-palette-orange', '--one-palette-amber'].map(tok);
-  const rgb = s => (s.match(/[\d.]+/g) || []).map(Number);
+  const known = ['--color-fg-subtle', '--color-fg-placeholder'].map(tok);
+  const paletteBg = ['--color-green', '--color-orange', '--color-amber'].map(tok);
+  // цвета кита приходят как oklch()/color(srgb …) — приводим к RGBA через canvas
+  const cx = Object.assign(document.createElement('canvas'), {width: 1, height: 1}).getContext('2d', {willReadFrequently: true});
+  const rgb = s => { if (!s || s === 'transparent') return [0, 0, 0, 0]; cx.clearRect(0, 0, 1, 1); cx.fillStyle = '#000'; cx.fillStyle = s; cx.fillRect(0, 0, 1, 1);
+    const d = cx.getImageData(0, 0, 1, 1).data; return [d[0], d[1], d[2], d[3] / 255] };
   const hex = c => '#' + c.slice(0, 3).map(x => Math.round(x).toString(16).padStart(2, '0')).join('');
   const lum = c => { const a = c.slice(0, 3).map(v => { v /= 255; return v <= .03928 ? v / 12.92 : ((v + .055) / 1.055) ** 2.4 });
     return .2126 * a[0] + .7152 * a[1] + .0722 * a[2] };
@@ -41,7 +49,7 @@ PROBE = r"""
   }
   const bgOf = el => { for (let e = el; e; e = e.parentElement) { const s = getComputedStyle(e);
       if (s.backgroundImage !== 'none' && !s.backgroundImage.startsWith('url')) return null;
-      const c = rgb(s.backgroundColor); if (c.length && (c.length < 4 || c[3] > .5)) return c; }
+      const c = rgb(s.backgroundColor); if (c[3] > .5) return c; }
     return rgb(getComputedStyle(document.body).backgroundColor) };
   const seen = new Set();
   for (const el of document.querySelectorAll('body *')) {
@@ -49,13 +57,13 @@ PROBE = r"""
     const own = [...el.childNodes].some(n => n.nodeType === 3 && n.textContent.trim());
     if (!own || el.closest(':disabled,[aria-disabled=true]')) continue;
     const s = getComputedStyle(el); const fg = rgb(s.color), bg = bgOf(el);
-    if (!bg || (fg.length > 3 && fg[3] < 1)) continue;
+    if (!bg || fg[3] < 1) continue;
     const r = (Math.max(lum(fg), lum(bg)) + .05) / (Math.min(lum(fg), lum(bg)) + .05);
     const big = parseFloat(s.fontSize) >= 24 || (parseFloat(s.fontSize) >= 18.66 && +s.fontWeight >= 700);
     if (r >= (big ? 3 : 4.5)) continue;
     const key = hex(fg) + hex(bg) + el.className;
     if (seen.has(key)) continue; seen.add(key);
-    out.contrast.push({el: name(el), ratio: Math.round(r * 100) / 100, fg: hex(fg), bg: hex(bg), known: known.includes(hex(fg)) || (paletteBg.includes(hex(bg)) && hex(fg) === tok('--one-accent-on'))});
+    out.contrast.push({el: name(el), ratio: Math.round(r * 100) / 100, fg: hex(fg), bg: hex(bg), known: known.includes(hex(fg)) || (paletteBg.includes(hex(bg)) && hex(fg) === tok('--color-accent-on'))});
   }
   return out;
 }
@@ -83,8 +91,8 @@ def main():
                 page.on("pageerror", lambda e: errors.append(str(e)))
                 page.goto(url)
                 page.evaluate("t => { document.documentElement.setAttribute('data-theme', t); document.getElementById('pp-sim').checked = false }", theme)
-                for route in ROUTES:
-                    page.evaluate("r => location.hash = '#' + r", route)
+                for route, (prof, role) in ROUTES.items():
+                    page.evaluate("([r, p, ro]) => { if (SE.S.profile !== p) SE.switchProfile(p); SE.S.role = ro; location.hash = '#' + r; SE.render() }", [route, prof, role])
                     page.wait_for_timeout(150)
                     res = page.evaluate(PROBE)
                     where = f"{route} · {theme} · {width}"

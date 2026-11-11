@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
-"""Сборка прототипа: prorotypes/src + prorotypes/vendor → prorotypes/index.html (один самодостаточный файл).
+"""Собирает prorotypes/index.html — один самодостаточный файл без внешних запросов.
 
-Запуск из корня репозитория:
-  python tools/build_prototype.py          собрать
-  python tools/build_prototype.py --check  проверить, что index.html собран из текущих исходников (код выхода 1 — нет)
+Состав:
+- vendor/one-psim/kit.css — скомпилированный слой ONE PSIM Prototype Kit (Tailwind 4: словарь --one-*,
+  светлая и тёмная темы, компоненты). Ссылки на шрифты кита (/src/fonts/...) заменяются на Inter в base64;
+  курсив кита не встраивается (+380 КБ), браузер наклоняет прямое начертание сам.
+- vendor/one-psim/kit.js — рантайм кита (тема, меню, поповеры, подсказки data-tip, бегунок .seg).
+- vendor/octicons/octicons-16.json — иконки, в файл попадают только используемые.
+- src/app.css, src/body.html, src/i18n-en.js (каталог строк English), src/js/*.js по порядку имён
+  (склеиваются в одну функцию), src/selftest.js.
+Иконка в коде — ic('имя') в js или {{ic:имя}} в body.html; имя — из octicons-16.json без суффикса -16.
 
-prorotypes/index.html — сгенерированный файл, руками не править: правка идёт в prorotypes/src/.
-Состав: токены ONE PSIM (vendor/one-psim/tokens.json → переменные --one-*, светлая и тёмная тема), шрифт Inter (base64),
-слой компонентов кита bundle.css и его рантайм bundle.js, стили src/app.css, разметка src/body.html,
-иконки Octicons (только используемые, из vendor/octicons/octicons-16.json), src/app.js и src/selftest.js.
-Иконка в коде — ic('имя') в app.js или {{ic:имя}} в body.html; имя — из octicons-16.json без суффикса -16.
+    python tools/build_prototype.py           собрать
+    python tools/build_prototype.py --check   проверить, что index.html собран из текущих исходников
 """
 import base64
 import json
@@ -27,76 +30,58 @@ def read(*parts, mode="r"):
         return f.read()
 
 
-def tokens_css():
-    tok = json.loads(read(VENDOR, "one-psim", "tokens.json"))
-    light, dark = [], []
-    for t in tok["color"]["tokens"]:
-        v = t["value"]
-        if isinstance(v, dict):
-            light.append(f"--{t['name']}:{v['light']}")
-            dark.append(f"--{t['name']}:{v['dark']}")
-        else:
-            light.append(f"--{t['name']}:{v}")
-    light += [f"--{t['name']}:{t['value']}" for t in tok["radius"]["tokens"]]
-    for t in tok["shadow"]["tokens"]:
-        light.append(f"--{t['name']}:{t['value']['light']}")
-        dark.append(f"--{t['name']}:{t['value']['dark']}")
-    light.append('--one-font-ui:Inter,Roboto,"Segoe UI",sans-serif')
-    light.append('--one-font-mono:"Roboto Mono",Consolas,"DejaVu Sans Mono",monospace')
+def kit_css():
+    css = read(VENDOR, "one-psim", "kit.css")
+    css = re.sub(r"@font-face\{[^}]*\}", "", css)          # шрифты кита ссылаются на /src/fonts/… — заменяем своим
     font = base64.b64encode(read(VENDOR, "one-psim", "InterVariable.woff2", mode="rb")).decode()
-    return (f"@font-face{{font-family:Inter;src:url(data:font/woff2;base64,{font}) format('woff2');"
-            f"font-weight:100 900;font-style:normal;font-display:swap}}\n"
-            f":root{{{';'.join(light)};color-scheme:light}}\n:root[data-theme=dark]{{{';'.join(dark)};color-scheme:dark}}\n")
+    face = (f"@font-face{{font-family:Inter;font-style:normal;font-weight:100 900;font-display:swap;"
+            f"src:url(data:font/woff2;base64,{font}) format('woff2')}}")
+    return face + css
+
+
+def app_js():
+    parts = sorted(f for f in os.listdir(os.path.join(SRC, "js")) if f.endswith(".js"))
+    body = "\n".join(f"/* ===== src/js/{f} ===== */\n" + read(SRC, "js", f) for f in parts)
+    return "(function(){\n'use strict';\n" + body + "\n})();"
 
 
 def build():
-    app_js, body, selftest = read(SRC, "app.js"), read(SRC, "body.html"), read(SRC, "selftest.js")
+    js, body, selftest, i18n = app_js(), read(SRC, "body.html"), read(SRC, "selftest.js"), read(SRC, "i18n-en.js")
     catalog = json.loads(read(VENDOR, "octicons", "octicons-16.json"))
-    names = set(re.findall(r"ic\('([a-z0-9-]+)'", app_js)) | set(re.findall(r"\{\{ic:([a-z0-9-]+)\}\}", body))
-    missing = sorted(n for n in names if n not in catalog)
+    used = set(re.findall(r"ic\('([a-z0-9-]+)'", js)) | set(re.findall(r"\{\{ic:([a-z0-9-]+)\}\}", body))
+    missing = sorted(n for n in used if n not in catalog)
     if missing:
-        sys.exit(f"Нет иконок в vendor/octicons/octicons-16.json: {', '.join(missing)}")
-    icons = {n: catalog[n] for n in sorted(names)}
+        sys.exit("нет иконок в octicons-16.json: " + ", ".join(missing))
+    icons = {n: catalog[n] for n in sorted(used)}
     body = re.sub(r"\{\{ic:([a-z0-9-]+)\}\}",
-                  lambda m: f'<svg class="ic ic-18" viewBox="0 0 16 16" aria-hidden="true">{icons[m.group(1)]}</svg>', body)
-    return f'''<!doctype html>
-<html lang="ru" data-theme="light">
+                  lambda m: f'<svg class="ic" viewBox="0 0 16 16" aria-hidden="true">{catalog[m.group(1)]}</svg>', body)
+    return f"""<!doctype html>
+<html lang="ru" data-theme="dark">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Безопасное образование · прототип интерфейса — Интеллект X</title>
-<!-- Сгенерировано tools/build_prototype.py из prorotypes/src и prorotypes/vendor — руками не править.
-     Прототип по ТЗ «SafeEducation_Specification.md» (Безопасное образование). Стиль — ONE PSIM Prototype Kit, иконки — Octicons (MIT).
-     Самопроверка: index.html?selftest -->
-<style>{tokens_css()}</style>
-<style>{read(VENDOR, "one-psim", "bundle.css")}</style>
+<!-- Прототип по ТЗ «SafeEducation_Specification.md» и «Корректировка дашборда». Собран tools/build_prototype.py — руками не править. -->
+<style>{kit_css()}</style>
 <style>{read(SRC, "app.css")}</style>
 </head>
-<body>
+<body class="bg-canvas text-fg font-ui">
 {body}
-<script>{read(VENDOR, "one-psim", "bundle.js")}</script>
+<script>{read(VENDOR, "one-psim", "kit.js")}</script>
 <script>const ICONS={json.dumps(icons, ensure_ascii=False)};</script>
-<script>{app_js}</script>
+<script>{i18n}</script>
+<script>{js}</script>
 <script>{selftest}</script>
 </body>
 </html>
-'''
-
-
-def main():
-    html = build()
-    if "--check" in sys.argv:
-        current = read(OUT) if os.path.exists(OUT) else ""
-        if current != html:
-            print("prorotypes/index.html не совпадает с исходниками: python tools/build_prototype.py")
-            return 1
-        print("prorotypes/index.html собран из текущих исходников")
-        return 0
-    with open(OUT, "w", encoding="utf-8", newline="\n") as f:
-        f.write(html)
-    print(f"prorotypes/index.html — {len(html.encode()) // 1024} КБ")
-    return 0
+"""
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    html = build()
+    if "--check" in sys.argv:
+        current = read(OUT) if os.path.exists(OUT) else ""
+        sys.exit(0 if current == html else "index.html устарел — запустите tools/build_prototype.py")
+    with open(OUT, "w", encoding="utf-8") as f:
+        f.write(html)
+    print(f"prorotypes/index.html — {len(html.encode()) // 1024} КБ")
